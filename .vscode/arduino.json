@@ -1,0 +1,7 @@
+{
+    "board": "SparkFun:avr:promicro",
+    "configuration": "cpu=8MHzatmega32U4",
+    "port": "COM9",
+    "output": "c:\\tmp\\",
+    "sketch": "Thunder.ino"
+}
