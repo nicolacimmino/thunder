@@ -35,22 +35,23 @@ CRGB led[LEDS_COUNT];
 
 int strikes = 0;
 int distance = 0;
-int totEnergy = 0;
+uint32_t energy = 0;
 int interferers = 0;
 unsigned long lastStrikeTime = 0;
+unsigned long timeSinceLastStrikeMinutes = 0;
 
 void setup()
 {
     Serial.begin(115200);
 
     FastLED.addLeds<WS2812B, 5, GRB>(led, LEDS_COUNT);
-    FastLED.setBrightness(255);
+    FastLED.setBrightness(100);
 
     Wire.begin();
     lightning.begin();
     lightning.resetSettings();
     lightning.setIndoorOutdoor(INDOOR);
-    lightning.spikeRejection(4);
+    lightning.spikeRejection(2);
 
     for (int ix = 0; ix < LEDS_COUNT; ix++)
     {
@@ -114,31 +115,50 @@ void reportStatus()
     }
     Serial.println(" km      ");
 
-    Serial.print("AVE: ");
+    Serial.print("ENE: ");
     if (strikes > 0)
     {
-        Serial.println(totEnergy / strikes);
+        Serial.println(energy);
     }
     else
     {
         Serial.println("---");
     }
+
+    Serial.print("TMS: ");
+    if (timeSinceLastStrikeMinutes > 0)
+    {
+        Serial.print(timeSinceLastStrikeMinutes);
+    }
+    else
+    {
+        Serial.print("---");
+    }
+    Serial.println(" min      ");
+
     Serial.println("------------------------");
 }
 
 void updateStatusColor()
 {
-    byte timeSinceLastStrikeMinutes = ((millis() - lastStrikeTime) / 600);
+    timeSinceLastStrikeMinutes = 1 + floor(((millis() - lastStrikeTime) / 60000));
 
-    CRGB color = CRGB::Black;
-    if (timeSinceLastStrikeMinutes < 64)
+    CRGB color = CRGB::Green;
+    float val = (exp(sin(millis() / 2000.0 * PI)) - 0.36787944) * 108.0;
+    
+    if (lastStrikeTime != 0 && timeSinceLastStrikeMinutes < 60)
     {
         color = CHSV(timeSinceLastStrikeMinutes, 255, 255);
     }
 
+    color.fadeToBlackBy(255 - val);
+
     if (led[7] != color)
     {
-        led[7] = color;
+        for (int ix = 0; ix < LEDS_COUNT; ix++)
+        {
+            led[ix] = color;
+        }
         FastLED.show();
     }
 }
@@ -154,13 +174,13 @@ void loop()
         if (intVal == DISTURBER_INT)
         {
             interferers++;
-            lightningShow();
-            lastStrikeTime = millis();
+            // lightningShow();
+            // lastStrikeTime = millis();
         }
         else if (intVal == LIGHTNING_INT)
         {
             strikes++;
-            totEnergy += lightning.lightningEnergy();
+            energy = lightning.lightningEnergy();
             distance = lightning.distanceToStorm();
 
             lastStrikeTime = millis();
