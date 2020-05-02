@@ -20,7 +20,6 @@
 #include <Wire.h>
 #include "SparkFun_AS3935.h"
 #include <FastLED.h>
-#include <SSD1306AsciiAvrI2c.h>
 
 #define AS3935_ADDR 0x03
 #define INDOOR 0x12
@@ -28,68 +27,43 @@
 #define LIGHTNING_INT 0x08
 #define DISTURBER_INT 0x04
 #define NOISE_INT 0x01
-#define DISPLAY_I2C_ADDRESS 0x3C
+#define LEDS_COUNT 10
 
 SparkFun_AS3935 lightning(AS3935_ADDR);
 
-CRGB led[12];
-CRGB ledBackup[12];
-
-SSD1306AsciiAvrI2c oled;
+CRGB led[LEDS_COUNT];
 
 int strikes = 0;
 int distance = 0;
 int totEnergy = 0;
 int interferers = 0;
-int lastStrikeTime = millis();
-
-// This variable holds the number representing the lightning or non-lightning
-// event issued by the lightning detector.
-byte intVal = 0;
+unsigned long lastStrikeTime = 0;
 
 void setup()
 {
-    Serial.begin(9600);
+    Serial.begin(115200);
 
-    FastLED.addLeds<WS2812B, 5, GRB>(led, 12);
+    FastLED.addLeds<WS2812B, 5, GRB>(led, LEDS_COUNT);
     FastLED.setBrightness(255);
 
     Wire.begin();
-    if (!lightning.begin())
-    {
-        Serial.println("Lightning Detector did not start up, freezing!");
-        while (1)
-            ;
-    }
-    else
-    {
-        Serial.println("Schmow-ZoW, Lightning Detector Ready!\n");
-    }
+    lightning.begin();
+    lightning.resetSettings();
+    lightning.setIndoorOutdoor(INDOOR);
+    lightning.spikeRejection(4);
 
-    lightning.spikeRejection(2);
-
-    for (int ix = 0; ix < 12; ix++)
+    for (int ix = 0; ix < LEDS_COUNT; ix++)
     {
         led[ix] = CRGB::Black;
     }
-
-    oled.begin(&Adafruit128x64, DISPLAY_I2C_ADDRESS);
-    oled.setFont(System5x7);
-    oled.set1X();
-
-    oled.clear(0, oled.displayWidth(), 0, 0);
-    oled.setRow(0);
 }
-
-unsigned long lastShiftTime = 0;
 
 void lightningShow()
 {
     byte previousBrightness = FastLED.getBrightness();
 
-    for (int ix = 0; ix < 12; ix++)
+    for (int ix = 0; ix < LEDS_COUNT; ix++)
     {
-        ledBackup[ix] = led[ix];
         led[ix] = CRGB::White;
     }
 
@@ -104,98 +78,97 @@ void lightningShow()
         delay(random(1, 150));
     }
 
-    FastLED.setBrightness(random(100, 200));
-    FastLED.show();
-    delay(random(50, 100));
-
-    for (int ix = 100; ix >= 0; ix -= random(1, 5))
-    {
-        FastLED.setBrightness(ix);
-        FastLED.show();
-        delay(1);
-    }
-
     FastLED.setBrightness(previousBrightness);
-    FastLED.show();
 
-    for (int ix = 0; ix < 12; ix++)
+    for (int ix = 0; ix < LEDS_COUNT; ix++)
     {
-        led[ix] = ledBackup[ix];
+        led[ix] = CRGB::Black;
     }
+    FastLED.show();
 }
 
-void loop()
+void reportStatus()
 {
-    oled.clear(0, oled.displayWidth(), 0, 0);
-    oled.setCursor(0, 2);
-    oled.print("INT: ");
-    oled.println(interferers);
+    static unsigned long lastReport = 0;
 
-    oled.print("STK: ");
-    oled.println(strikes);
+    if (millis() - lastReport < 1000)
+    {
+        return;
+    }
+    lastReport = millis();
 
-    oled.print("DST: ");
+    Serial.print("INT: ");
+    Serial.println(interferers);
+
+    Serial.print("STK: ");
+    Serial.println(strikes);
+
+    Serial.print("DST: ");
     if (strikes > 0)
     {
-        oled.print(distance);
+        Serial.print(distance);
     }
     else
     {
-        oled.print("---");
+        Serial.print("---");
     }
-    oled.println(" km      ");
+    Serial.println(" km      ");
 
-    oled.print("AVE: ");
+    Serial.print("AVE: ");
     if (strikes > 0)
     {
-        oled.println(totEnergy / strikes);
+        Serial.println(totEnergy / strikes);
     }
     else
     {
-        oled.println("---");
+        Serial.println("---");
     }
+    Serial.println("------------------------");
+}
 
-    intVal = lightning.readInterruptReg();
-    if (intVal == NOISE_INT)
-    {
-        Serial.println("Noise.");
-    }
-    else if (intVal == DISTURBER_INT)
-    {
-        interferers++;
-        lightningShow();
-
-        if (distance == 0)
-        {
-            distance = 30;
-        }
-
-        distance = distance - 1;
-        lastStrikeTime = millis();
-    }
-    else if (intVal == LIGHTNING_INT)
-    {
-        strikes++;
-        totEnergy += lightning.lightningEnergy();
-        distance = lightning.distanceToStorm();
-
-        lastStrikeTime = millis();
-        lightningShow();
-    }
-
+void updateStatusColor()
+{
     byte timeSinceLastStrikeMinutes = ((millis() - lastStrikeTime) / 600);
 
     CRGB color = CRGB::Black;
     if (timeSinceLastStrikeMinutes < 64)
     {
-        color = CHSV(timeSinceLastStrikeMinutes, 255, 255 * (40.0 / distance));
+        color = CHSV(timeSinceLastStrikeMinutes, 255, 255);
     }
 
-    for (int ix = 0; ix < 12; ix++)
+    if (led[7] != color)
     {
-        led[ix] = color;
+        led[7] = color;
+        FastLED.show();
     }
-    FastLED.show();
+}
 
-    delay(2000);
+void loop()
+{
+    reportStatus();
+    updateStatusColor();
+
+    byte intVal = lightning.readInterruptReg();
+    if (intVal)
+    {
+        if (intVal == DISTURBER_INT)
+        {
+            interferers++;
+            lightningShow();
+            lastStrikeTime = millis();
+        }
+        else if (intVal == LIGHTNING_INT)
+        {
+            strikes++;
+            totEnergy += lightning.lightningEnergy();
+            distance = lightning.distanceToStorm();
+
+            lastStrikeTime = millis();
+            lightningShow();
+        }
+        while (lightning.readInterruptReg())
+        {
+            delay(1);
+        }
+    }
 }
