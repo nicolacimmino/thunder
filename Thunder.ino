@@ -144,6 +144,9 @@ void updateStatusColor()
     timeSinceLastStrikeMinutes = 1 + floor(((millis() - lastStrikeTime) / 60000));
 
     CRGB color = CRGB::Green;
+    
+    // Keep breathing! See Sean Voisen great post from which I grabbed the formula.
+    // https://sean.voisen.org/blog/2011/10/breathing-led-with-arduino/
     float val = (exp(sin(millis() / 2000.0 * PI)) - 0.36787944) * 108.0;
     
     if (lastStrikeTime != 0 && timeSinceLastStrikeMinutes < 60)
