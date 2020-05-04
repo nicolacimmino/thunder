@@ -20,6 +20,8 @@
 #include <Wire.h>
 #include "SparkFun_AS3935.h"
 #include <FastLED.h>
+#include "VT100.h"
+#include "messages.h"
 
 #define AS3935_ADDR 0x03
 #define INDOOR 0x12
@@ -43,6 +45,10 @@ unsigned long timeSinceLastStrikeMinutes = 0;
 void setup()
 {
     Serial.begin(115200);
+    while(!Serial) {
+
+    }
+    VT100.begin(Serial);
 
     FastLED.addLeds<WS2812B, 5, GRB>(led, LEDS_COUNT);
     FastLED.setBrightness(100);
@@ -98,6 +104,14 @@ void reportStatus()
     }
     lastReport = millis();
 
+    VT100.clearScreen();
+    VT100.setTextColor(VT_YELLOW);
+
+    VT100.setCursor(2, 1);
+    messages_print(0);
+
+    VT100.setCursor(10, 1);
+    
     Serial.print("INT: ");
     Serial.println(interferers);
 
