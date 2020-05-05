@@ -46,6 +46,8 @@ SSD1306AsciiAvrI2c oled;
 
 void setup()
 {
+    Serial.begin(9600);
+
     FastLED.addLeds<WS2812B, 5, GRB>(led, LEDS_COUNT);
     FastLED.setBrightness(100);
 
@@ -108,7 +110,10 @@ void reportStatus()
     lastReport = millis();
 
     oled.clear(0, oled.displayWidth(), 0, 0);
-    oled.setCursor(0, 2);
+    oled.setCursor(0, 1);
+
+    oled.println("        Thunder");
+    oled.println("");
 
     oled.print("INT: ");
     oled.println(interferers);
@@ -203,5 +208,9 @@ void loop()
         {
             delay(1);
         }
+    }
+
+    if(Serial.read() != -1) {
+        lightningShow();
     }
 }
