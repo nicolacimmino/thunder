@@ -20,8 +20,8 @@
 #include <Wire.h>
 #include "SparkFun_AS3935.h"
 #include <FastLED.h>
-#include "VT100.h"
 #include "messages.h"
+#include <SSD1306AsciiAvrI2c.h>
 
 #define AS3935_ADDR 0x03
 #define INDOOR 0x12
@@ -30,6 +30,7 @@
 #define DISTURBER_INT 0x04
 #define NOISE_INT 0x01
 #define LEDS_COUNT 10
+#define DISPLAY_I2C_ADDRESS 0x3C
 
 SparkFun_AS3935 lightning(AS3935_ADDR);
 
@@ -41,15 +42,10 @@ uint32_t energy = 0;
 int interferers = 0;
 unsigned long lastStrikeTime = 0;
 unsigned long timeSinceLastStrikeMinutes = 0;
+SSD1306AsciiAvrI2c oled;
 
 void setup()
 {
-    Serial.begin(115200);
-    while(!Serial) {
-
-    }
-    VT100.begin(Serial);
-
     FastLED.addLeds<WS2812B, 5, GRB>(led, LEDS_COUNT);
     FastLED.setBrightness(100);
 
@@ -63,6 +59,13 @@ void setup()
     {
         led[ix] = CRGB::Black;
     }
+
+    oled.begin(&Adafruit128x64, DISPLAY_I2C_ADDRESS);
+    oled.setFont(System5x7);
+    oled.set1X();
+
+    oled.clear(0, oled.displayWidth(), 0, 0);
+    oled.setRow(0);
 }
 
 void lightningShow()
@@ -104,53 +107,46 @@ void reportStatus()
     }
     lastReport = millis();
 
-    VT100.clearScreen();
-    VT100.setTextColor(VT_YELLOW);
+    oled.clear(0, oled.displayWidth(), 0, 0);
+    oled.setCursor(0, 2);
 
-    VT100.setCursor(2, 1);
-    messages_print(0);
+    oled.print("INT: ");
+    oled.println(interferers);
 
-    VT100.setCursor(10, 1);
-    
-    Serial.print("INT: ");
-    Serial.println(interferers);
+    oled.print("STK: ");
+    oled.println(strikes);
 
-    Serial.print("STK: ");
-    Serial.println(strikes);
-
-    Serial.print("DST: ");
+    oled.print("DST: ");
     if (strikes > 0)
     {
-        Serial.print(distance);
+        oled.print(distance);
     }
     else
     {
-        Serial.print("---");
+        oled.print("---");
     }
-    Serial.println(" km      ");
+    oled.println(" km      ");
 
-    Serial.print("ENE: ");
+    oled.print("ENE: ");
     if (strikes > 0)
     {
-        Serial.println(energy);
+        oled.println(energy);
     }
     else
     {
-        Serial.println("---");
+        oled.println("---");
     }
 
-    Serial.print("TMS: ");
+    oled.print("TMS: ");
     if (timeSinceLastStrikeMinutes > 0)
     {
-        Serial.print(timeSinceLastStrikeMinutes);
+        oled.print(timeSinceLastStrikeMinutes);
     }
     else
     {
-        Serial.print("---");
+        oled.print("---");
     }
-    Serial.println(" min      ");
-
-    Serial.println("------------------------");
+    oled.println(" min      ");
 }
 
 void updateStatusColor()
@@ -158,11 +154,11 @@ void updateStatusColor()
     timeSinceLastStrikeMinutes = 1 + floor(((millis() - lastStrikeTime) / 60000));
 
     CRGB color = CRGB::Green;
-    
+
     // Keep breathing! See Sean Voisen great post from which I grabbed the formula.
     // https://sean.voisen.org/blog/2011/10/breathing-led-with-arduino/
     float val = (exp(sin(millis() / 2000.0 * PI)) - 0.36787944) * 108.0;
-    
+
     if (lastStrikeTime != 0 && timeSinceLastStrikeMinutes < 60)
     {
         color = CHSV(timeSinceLastStrikeMinutes, 255, 255);
