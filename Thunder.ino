@@ -22,6 +22,7 @@
 #include <FastLED.h>
 #include "messages.h"
 #include <SSD1306AsciiAvrI2c.h>
+#include <ADCTouch.h>
 
 #define AS3935_ADDR 0x03
 #define INDOOR 0x12
@@ -31,6 +32,7 @@
 #define NOISE_INT 0x01
 #define LEDS_COUNT 10
 #define DISPLAY_I2C_ADDRESS 0x3C
+#define TOUCH_THRESHOLD 5
 
 SparkFun_AS3935 lightning(AS3935_ADDR);
 
@@ -38,11 +40,13 @@ CRGB led[LEDS_COUNT];
 
 int strikes = 0;
 int distance = 0;
-uint32_t energy = 0;
+int energy = 0;
 int interferers = 0;
 unsigned long lastStrikeTime = 0;
-unsigned long timeSinceLastStrikeMinutes = 0;
+int timeSinceLastStrikeMinutes = 0;
 SSD1306AsciiAvrI2c oled;
+int touchRef;
+bool thunderstormActive = false;
 
 void setup()
 {
@@ -66,8 +70,9 @@ void setup()
     oled.setFont(System5x7);
     oled.set1X();
 
-    oled.clear(0, oled.displayWidth(), 0, 0);
-    oled.setRow(0);
+    oled.clear();
+
+    touchRef = ADCTouch.read(A1, 500);
 }
 
 void lightningShow()
@@ -109,66 +114,84 @@ void reportStatus()
     }
     lastReport = millis();
 
-    oled.clear(0, oled.displayWidth(), 0, 0);
     oled.setCursor(0, 1);
 
-    oled.println("        Thunder");
-    oled.println("");
+    char message[256];
 
-    oled.print("INT: ");
-    oled.println(interferers);
-
-    oled.print("STK: ");
-    oled.println(strikes);
-
-    oled.print("DST: ");
-    if (strikes > 0)
+    if (ADCTouch.read(A1) - touchRef > TOUCH_THRESHOLD)
     {
-        oled.print(distance);
+        sprintf(message, "        Thunder  \n"
+                         "                   \n"
+                         "STK: %d            \n"
+                         "DST: %d            \n"
+                         "ENE: %d            \n"
+                         "TMS: %d            \n"
+                         "                   \n",
+                strikes, distance, energy, timeSinceLastStrikeMinutes);
     }
     else
     {
-        oled.print("---");
+        if (!thunderstormActive)
+        {
+            sprintf(message, "        R.I.P.   \n"
+                             "                 \n"
+                             "    Storm Thunder \n"
+                             "                 \n"
+                             "b. 31-12-1970   \n"
+                             "d. 21-10-2000\n"
+                             "                 \n",
+                    min(distance, 30), energy / 2000000, timeSinceLastStrikeMinutes, (strikes / 100) % 10, (strikes / 10) % 10, strikes % 10);
+        }
+        else
+        {
+            sprintf(message, "        R.I.P.   \n"
+                             "                 \n"
+                             "    Storm Thunder \n"
+                             "                 \n"
+                             "b. %02d-%02d-19%02d  \n"
+                             "d. 2%d-0%d-197%d\n"
+                             "                 \n",
+                    min(distance, 30), energy / 2000000, timeSinceLastStrikeMinutes, (strikes / 100) % 10, (strikes / 10) % 10, strikes % 10);
+        }
     }
-    oled.println(" km      ");
 
-    oled.print("ENE: ");
-    if (strikes > 0)
-    {
-        oled.println(energy);
-    }
-    else
-    {
-        oled.println("---");
-    }
-
-    oled.print("TMS: ");
-    if (timeSinceLastStrikeMinutes > 0)
-    {
-        oled.print(timeSinceLastStrikeMinutes);
-    }
-    else
-    {
-        oled.print("---");
-    }
-    oled.println(" min      ");
+    oled.print(message);
 }
 
 void updateStatusColor()
 {
-    timeSinceLastStrikeMinutes = 1 + floor(((millis() - lastStrikeTime) / 60000));
-
-    CRGB color = CRGB::Green;
-
     // Keep breathing! See Sean Voisen great post from which I grabbed the formula.
     // https://sean.voisen.org/blog/2011/10/breathing-led-with-arduino/
     float val = (exp(sin(millis() / 2000.0 * PI)) - 0.36787944) * 108.0;
 
-    if (lastStrikeTime != 0 && timeSinceLastStrikeMinutes < 60)
+    if (!thunderstormActive)
     {
-        color = CHSV(timeSinceLastStrikeMinutes, 255, 255);
+        CRGB noStormColor = CRGB::Green;
+        noStormColor.fadeToBlackBy(255 - val);
+
+        if (led[7] != noStormColor)
+        {
+            for (int ix = 0; ix < LEDS_COUNT; ix++)
+            {
+                led[ix] = noStormColor;
+            }
+            FastLED.show();
+        }
+
+        return;
     }
 
+    timeSinceLastStrikeMinutes = 1 + floor(((millis() - lastStrikeTime) / 60000));
+
+    if (timeSinceLastStrikeMinutes > 90)
+    {
+        strikes = 0;
+        thunderstormActive = false;
+
+        return;
+    }
+
+    CRGB color = CHSV(timeSinceLastStrikeMinutes, 255, 255);
     color.fadeToBlackBy(255 - val);
 
     if (led[7] != color)
@@ -203,6 +226,7 @@ void loop()
 
             lastStrikeTime = millis();
             lightningShow();
+            thunderstormActive = true;
         }
         while (lightning.readInterruptReg())
         {
@@ -210,7 +234,21 @@ void loop()
         }
     }
 
-    if(Serial.read() != -1) {
+    if (Serial.read() == 't')
+    {
+        strikes++;
+        energy = random(100, 2000000);
+        distance = random(1, 20);
+
+        lastStrikeTime = millis();
         lightningShow();
+        thunderstormActive = true;
+    }
+
+    if (Serial.read() == 'e')
+    {
+        strikes = 0;
+        lastStrikeTime = millis() - 100 * 60 * 1000;
+        thunderstormActive = false;
     }
 }
