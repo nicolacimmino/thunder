@@ -104,30 +104,48 @@ void lightningShow()
     FastLED.show();
 }
 
+char message[128];
+char messageSwap[128];
+
 void reportStatus()
 {
-    static unsigned long lastReport = 0;
+    static bool displayRawStats = true;
+    static unsigned long lastReportTime = 0;
 
-    if (millis() - lastReport < 1000)
+    if (millis() - lastReportTime < 1000)
     {
         return;
     }
-    lastReport = millis();
+    lastReportTime = millis();
 
-    oled.setCursor(0, 1);
+    // if (ADCTouch.read(A1) - touchRef > TOUCH_THRESHOLD)
+    // {
+    //     displayRawStats = !displayRawStats;
+    // }
 
-    char message[256];
-
-    if (ADCTouch.read(A1) - touchRef > TOUCH_THRESHOLD)
+    if (displayRawStats)
     {
-        sprintf(message, "        Thunder  \n"
-                         "                   \n"
-                         "STK: %d            \n"
-                         "DST: %d            \n"
-                         "ENE: %d            \n"
-                         "TMS: %d            \n"
-                         "                   \n",
-                strikes, distance, energy, timeSinceLastStrikeMinutes);
+        if (!thunderstormActive)
+        {
+            sprintf(message, "        Thunder  \n"
+                             "                   \n"
+                             "STK: ---            \n"
+                             "DST: ---            \n"
+                             "ENE: ---            \n"
+                             "TMS: ---            \n"
+                             "                   \n");
+        }
+        else
+        {
+            sprintf(message, "        Thunder  \n"
+                             "                   \n"
+                             "STK: %d            \n"
+                             "DST: %d            \n"
+                             "ENE: %d            \n"
+                             "TMS: %d            \n"
+                             "                   \n",
+                    strikes, distance, energy, timeSinceLastStrikeMinutes);
+        }
     }
     else
     {
@@ -155,7 +173,12 @@ void reportStatus()
         }
     }
 
-    oled.print(message);
+    if (strcmp(message, messageSwap) != 0)
+    {
+        oled.setCursor(0, 1);
+        oled.print(message);
+        memcpy(messageSwap, message, 128);
+    }
 }
 
 void updateStatusColor()
@@ -169,14 +192,11 @@ void updateStatusColor()
         CRGB noStormColor = CRGB::Green;
         noStormColor.fadeToBlackBy(255 - val);
 
-        if (led[7] != noStormColor)
+        for (int ix = 0; ix < LEDS_COUNT; ix++)
         {
-            for (int ix = 0; ix < LEDS_COUNT; ix++)
-            {
-                led[ix] = noStormColor;
-            }
-            FastLED.show();
+            led[ix] = noStormColor;
         }
+        FastLED.show();
 
         return;
     }
@@ -194,14 +214,11 @@ void updateStatusColor()
     CRGB color = CHSV(timeSinceLastStrikeMinutes, 255, 255);
     color.fadeToBlackBy(255 - val);
 
-    if (led[7] != color)
+    for (int ix = 0; ix < LEDS_COUNT; ix++)
     {
-        for (int ix = 0; ix < LEDS_COUNT; ix++)
-        {
-            led[ix] = color;
-        }
-        FastLED.show();
+        led[ix] = color;
     }
+    FastLED.show();
 }
 
 void loop()
@@ -234,7 +251,8 @@ void loop()
         }
     }
 
-    if (Serial.read() == 't')
+    int controlValue = Serial.read();
+    if (controlValue == 't')
     {
         strikes++;
         energy = random(100, 2000000);
@@ -245,10 +263,9 @@ void loop()
         thunderstormActive = true;
     }
 
-    if (Serial.read() == 'e')
+    if (controlValue == 'e')
     {
         strikes = 0;
-        lastStrikeTime = millis() - 100 * 60 * 1000;
         thunderstormActive = false;
     }
 }
