@@ -104,8 +104,8 @@ void lightningShow()
     FastLED.show();
 }
 
-char message[128];
-char messageSwap[128];
+char message[160];
+char messageSwap[160];
 
 void reportStatus()
 {
@@ -118,10 +118,10 @@ void reportStatus()
     }
     lastReportTime = millis();
 
-    // if (ADCTouch.read(A1) - touchRef > TOUCH_THRESHOLD)
-    // {
-    //     displayRawStats = !displayRawStats;
-    // }
+    if (ADCTouch.read(A1) - touchRef > TOUCH_THRESHOLD)
+    {
+        displayRawStats = !displayRawStats;
+    }
 
     if (displayRawStats)
     {
@@ -129,11 +129,11 @@ void reportStatus()
         {
             sprintf(message, "        Thunder  \n"
                              "                   \n"
-                             "STK: ---            \n"
+                             "STK: %d            \n"
                              "DST: ---            \n"
                              "ENE: ---            \n"
                              "TMS: ---            \n"
-                             "                   \n");
+                             "                   \n", 0);
         }
         else
         {
@@ -177,7 +177,7 @@ void reportStatus()
     {
         oled.setCursor(0, 1);
         oled.print(message);
-        memcpy(messageSwap, message, 128);
+        memcpy(messageSwap, message, 160);
     }
 }
 
