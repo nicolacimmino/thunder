@@ -109,7 +109,7 @@ char messageSwap[160];
 
 void reportStatus()
 {
-    static bool displayRawStats = true;
+    static bool displayRawStats = false;
     static unsigned long lastReportTime = 0;
 
     if (millis() - lastReportTime < 1000)
@@ -127,13 +127,13 @@ void reportStatus()
     {
         if (!thunderstormActive)
         {
-            sprintf(message, "        Thunder  \n"
-                             "                   \n"
-                             "STK: %d            \n"
-                             "DST: ---            \n"
-                             "ENE: ---            \n"
-                             "TMS: ---            \n"
-                             "                   \n", 0);
+            strcpy(message, "        Thunder  \n"
+                            "                   \n"
+                            "STK: ---            \n"
+                            "DST: ---            \n"
+                            "ENE: ---            \n"
+                            "TMS: ---            \n"
+                            "                   \n");
         }
         else
         {
@@ -151,14 +151,13 @@ void reportStatus()
     {
         if (!thunderstormActive)
         {
-            sprintf(message, "        R.I.P.   \n"
-                             "                 \n"
-                             "    Storm Thunder \n"
-                             "                 \n"
-                             "b. 31-12-1970   \n"
-                             "d. 21-10-2000\n"
-                             "                 \n",
-                    min(distance, 30), energy / 2000000, timeSinceLastStrikeMinutes, (strikes / 100) % 10, (strikes / 10) % 10, strikes % 10);
+            strcpy(message, "        R.I.P.   \n"
+                            "                 \n"
+                            "    Storm Thunder \n"
+                            "                 \n"
+                            "b. 31-12-1970   \n"
+                            "d. 21-10-2000\n"
+                            "                 \n");
         }
         else
         {
@@ -167,9 +166,9 @@ void reportStatus()
                              "    Storm Thunder \n"
                              "                 \n"
                              "b. %02d-%02d-19%02d  \n"
-                             "d. 2%d-0%d-197%d\n"
+                             "d. 28-02-2%03d\n"
                              "                 \n",
-                    min(distance, 30), energy / 2000000, timeSinceLastStrikeMinutes, (strikes / 100) % 10, (strikes / 10) % 10, strikes % 10);
+                    (int)min(distance + 1, 31), (int)min(1 + (energy / 200000), 12), timeSinceLastStrikeMinutes, strikes);
         }
     }
 
@@ -183,9 +182,13 @@ void reportStatus()
 
 void updateStatusColor()
 {
+    timeSinceLastStrikeMinutes = floor(((millis() - lastStrikeTime) / 60000));
+
+    float breathRate = (thunderstormActive && timeSinceLastStrikeMinutes < 5) ? (2000.0 / (float)(min(strikes, 10))) : 2000.0;
+
     // Keep breathing! See Sean Voisen great post from which I grabbed the formula.
     // https://sean.voisen.org/blog/2011/10/breathing-led-with-arduino/
-    float val = (exp(sin(millis() / 2000.0 * PI)) - 0.36787944) * 108.0;
+    float val = (exp(sin(millis() / breathRate * PI)) - 0.36787944) * 108.0;
 
     if (!thunderstormActive)
     {
@@ -201,7 +204,7 @@ void updateStatusColor()
         return;
     }
 
-    timeSinceLastStrikeMinutes = 1 + floor(((millis() - lastStrikeTime) / 60000));
+    
 
     if (timeSinceLastStrikeMinutes > 90)
     {
