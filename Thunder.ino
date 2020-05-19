@@ -53,7 +53,7 @@ void setup()
     Serial.begin(9600);
 
     FastLED.addLeds<WS2812B, 5, GRB>(led, LEDS_COUNT);
-    FastLED.setBrightness(100);
+    FastLED.setBrightness(255);
 
     Wire.begin();
     lightning.begin();
@@ -192,7 +192,7 @@ void updateStatusColor()
 
     if (!thunderstormActive)
     {
-        CRGB noStormColor = CRGB::Green;
+        CRGB noStormColor = CRGB::DarkGreen;
         noStormColor.fadeToBlackBy(255 - val);
 
         for (int ix = 0; ix < LEDS_COUNT; ix++)
