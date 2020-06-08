@@ -32,7 +32,7 @@
 #define NOISE_INT 0x01
 #define LEDS_COUNT 10
 #define DISPLAY_I2C_ADDRESS 0x3C
-#define TOUCH_THRESHOLD 5
+#define TOUCH_THRESHOLD 10
 
 SparkFun_AS3935 lightning(AS3935_ADDR);
 
