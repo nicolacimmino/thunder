@@ -23,6 +23,8 @@
 #include "messages.h"
 #include <SSD1306AsciiAvrI2c.h>
 #include <ADCTouch.h>
+#include "terminal.h"
+#include <avr/wdt.h>
 
 #define AS3935_ADDR 0x03
 #define INDOOR 0x12
@@ -47,10 +49,12 @@ int timeSinceLastStrikeMinutes = 0;
 SSD1306AsciiAvrI2c oled;
 int touchRef;
 bool thunderstormActive = false;
+bool showOngoing = false;
 
 void setup()
 {
-    Serial.begin(9600);
+    Serial.begin(115200);
+    VT100.begin(Serial);
 
     FastLED.addLeds<WS2812B, 5, GRB>(led, LEDS_COUNT);
     FastLED.setBrightness(255);
@@ -73,10 +77,64 @@ void setup()
     oled.clear();
 
     touchRef = ADCTouch.read(A1, 500);
+
+    // Setup a watchdog interrupt every 64mS.
+    cli();
+    _WD_CONTROL_REG = (1 << WDCE) | (1 << WDE);
+    _WD_CONTROL_REG = (1 << WDIE) | (1 << WDP1);
+    sei();
+}
+
+ISR(WDT_vect)
+{
+    if(showOngoing) {
+        return;
+    }
+
+    timeSinceLastStrikeMinutes = floor(((millis() - lastStrikeTime) / 60000));
+
+    float breathRate = (thunderstormActive && timeSinceLastStrikeMinutes < 5) ? (2000.0 / (float)(min(strikes, 10))) : 2000.0;
+
+    // Keep breathing! See Sean Voisen great post from which I grabbed the formula.
+    // https://sean.voisen.org/blog/2011/10/breathing-led-with-arduino/
+    float val = (exp(sin(millis() / breathRate * PI)) - 0.36787944) * 108.0;
+
+    if (!thunderstormActive)
+    {
+        CRGB noStormColor = CRGB::DarkGreen;
+        noStormColor.fadeToBlackBy(255 - val);
+
+        for (int ix = 0; ix < LEDS_COUNT; ix++)
+        {
+            led[ix] = noStormColor;
+        }
+        FastLED.show();
+
+        return;
+    }
+
+    if (timeSinceLastStrikeMinutes > 90)
+    {
+        strikes = 0;
+        thunderstormActive = false;
+
+        return;
+    }
+
+    CRGB color = CHSV(timeSinceLastStrikeMinutes, 255, 255);
+    color.fadeToBlackBy(255 - val);
+
+    for (int ix = 0; ix < LEDS_COUNT; ix++)
+    {
+        led[ix] = color;
+    }
+    FastLED.show();
 }
 
 void lightningShow()
 {
+    showOngoing = true;
+
     byte previousBrightness = FastLED.getBrightness();
 
     for (int ix = 0; ix < LEDS_COUNT; ix++)
@@ -102,13 +160,13 @@ void lightningShow()
         led[ix] = CRGB::Black;
     }
     FastLED.show();
+ 
+    showOngoing = false;
 }
-
-char message[160];
-char messageSwap[160];
 
 void reportStatus()
 {
+    char message[160];
     static bool displayRawStats = false;
     static unsigned long lastReportTime = 0;
 
@@ -172,56 +230,66 @@ void reportStatus()
         }
     }
 
-    if (strcmp(message, messageSwap) != 0)
+    printStatusBar();
+
+    static uint16_t lastPoorCrc = 0;
+    uint16_t poorCrc = 0;
+    for (uint8_t ix = 0; ix < strlen(message); ix++)
+    {
+        poorCrc += message[ix];
+    }
+
+    if (poorCrc != lastPoorCrc)
     {
         oled.setCursor(0, 1);
         oled.print(message);
-        memcpy(messageSwap, message, 160);
     }
+
+    lastPoorCrc = poorCrc;
+
+    printReport(thunderstormActive, strikes, distance, energy, timeSinceLastStrikeMinutes);
 }
 
 void updateStatusColor()
 {
-    timeSinceLastStrikeMinutes = floor(((millis() - lastStrikeTime) / 60000));
+    //timeSinceLastStrikeMinutes = floor(((millis() - lastStrikeTime) / 60000));
 
-    float breathRate = (thunderstormActive && timeSinceLastStrikeMinutes < 5) ? (2000.0 / (float)(min(strikes, 10))) : 2000.0;
+    // float breathRate = (thunderstormActive && timeSinceLastStrikeMinutes < 5) ? (2000.0 / (float)(min(strikes, 10))) : 2000.0;
 
-    // Keep breathing! See Sean Voisen great post from which I grabbed the formula.
-    // https://sean.voisen.org/blog/2011/10/breathing-led-with-arduino/
-    float val = (exp(sin(millis() / breathRate * PI)) - 0.36787944) * 108.0;
+    // // Keep breathing! See Sean Voisen great post from which I grabbed the formula.
+    // // https://sean.voisen.org/blog/2011/10/breathing-led-with-arduino/
+    // float val = (exp(sin(millis() / breathRate * PI)) - 0.36787944) * 108.0;
 
-    if (!thunderstormActive)
-    {
-        CRGB noStormColor = CRGB::DarkGreen;
-        noStormColor.fadeToBlackBy(255 - val);
+    // if (!thunderstormActive)
+    // {
+    //     CRGB noStormColor = CRGB::DarkGreen;
+    //     noStormColor.fadeToBlackBy(255 - val);
 
-        for (int ix = 0; ix < LEDS_COUNT; ix++)
-        {
-            led[ix] = noStormColor;
-        }
-        FastLED.show();
+    //     for (int ix = 0; ix < LEDS_COUNT; ix++)
+    //     {
+    //         led[ix] = noStormColor;
+    //     }
+    //     FastLED.show();
 
-        return;
-    }
+    //     return;
+    // }
 
-    
+    // if (timeSinceLastStrikeMinutes > 90)
+    // {
+    //     strikes = 0;
+    //     thunderstormActive = false;
 
-    if (timeSinceLastStrikeMinutes > 90)
-    {
-        strikes = 0;
-        thunderstormActive = false;
+    //     return;
+    // }
 
-        return;
-    }
+    // CRGB color = CHSV(timeSinceLastStrikeMinutes, 255, 255);
+    // color.fadeToBlackBy(255 - val);
 
-    CRGB color = CHSV(timeSinceLastStrikeMinutes, 255, 255);
-    color.fadeToBlackBy(255 - val);
-
-    for (int ix = 0; ix < LEDS_COUNT; ix++)
-    {
-        led[ix] = color;
-    }
-    FastLED.show();
+    // for (int ix = 0; ix < LEDS_COUNT; ix++)
+    // {
+    //     led[ix] = color;
+    // }
+    // FastLED.show();
 }
 
 void loop()
