@@ -7,6 +7,8 @@
 
 #define TERMINAL_WIDTH 80
 
+extern bool winterMode;
+
 void printBanner()
 {
     VT100.setCursor(2, 1);
@@ -15,36 +17,69 @@ void printBanner()
 
 void printReport(bool thunderstormActive, uint32_t strikes, uint32_t distance, uint32_t energy, uint32_t timeSinceLastStrikeMinutes)
 {
+    VT100.setCursor(9, 2);
+    VT100.setTextColor(VT_YELLOW);
+    Serial.print("MODE: ");
+    VT100.setTextColor(VT_WHITE);
+    Serial.print(winterMode ? "WINTER" : "SUMMER");
+
+    VT100.setCursor(19, 2);
+    VT100.setTextColor(VT_YELLOW);
+    Serial.print("T - Thunder   R - Reset Stats   W - Toggle Winter Mode");
+
+    VT100.cursorOff();
+
     if (!thunderstormActive)
     {
-        VT100.setCursor(10, 2);
-        VT100.setTextColor(VT_GREEN);
-        Serial.print("No Thunderstorm.");
+        VT100.setCursor(11, 2);
+        VT100.setTextColor(VT_YELLOW);
+        Serial.print("STK: ");
+        VT100.setTextColor(VT_WHITE);
+        Serial.println("---");
+
+        VT100.setCursor(13, 2);
+        VT100.setTextColor(VT_YELLOW);
+        Serial.print("DST: ");
+        VT100.setTextColor(VT_WHITE);
+        Serial.println("---");
+
+        VT100.setCursor(15, 2);
+        VT100.setTextColor(VT_YELLOW);
+        Serial.print("ENE: ");
+        VT100.setTextColor(VT_WHITE);
+        Serial.println("---");
+
+        VT100.setCursor(17, 2);
+        VT100.setTextColor(VT_YELLOW);
+        Serial.print("TMS: ");
+        VT100.setTextColor(VT_WHITE);
+        Serial.println("---");
+
         VT100.cursorOff();
-        
+
         return;
     }
 
-    VT100.setCursor(10, 2);
+    VT100.setCursor(11, 2);
     VT100.setTextColor(VT_YELLOW);
     Serial.print("STK: ");
     VT100.setTextColor(VT_WHITE);
     Serial.println(strikes);
 
-    VT100.setCursor(12, 2);
+    VT100.setCursor(13, 2);
     VT100.setTextColor(VT_YELLOW);
     Serial.print("DST: ");
     VT100.setTextColor(VT_WHITE);
     Serial.print(distance);
     Serial.println(" km");
 
-    VT100.setCursor(14, 2);
+    VT100.setCursor(15, 2);
     VT100.setTextColor(VT_YELLOW);
     Serial.print("ENE: ");
     VT100.setTextColor(VT_WHITE);
     Serial.println(energy);
 
-    VT100.setCursor(16, 2);
+    VT100.setCursor(17, 2);
     VT100.setTextColor(VT_YELLOW);
     Serial.print("TMS: ");
     VT100.setTextColor(VT_WHITE);

@@ -35,6 +35,7 @@
 #define LEDS_COUNT 10
 #define DISPLAY_I2C_ADDRESS 0x3C
 #define TOUCH_THRESHOLD 10
+#define LAUGHTER_PIN 7
 
 SparkFun_AS3935 lightning(AS3935_ADDR);
 
@@ -50,6 +51,7 @@ SSD1306AsciiAvrI2c oled;
 int touchRef;
 bool thunderstormActive = false;
 bool showOngoing = false;
+unsigned long laughUntil = 0;
 
 void setup()
 {
@@ -83,11 +85,17 @@ void setup()
     _WD_CONTROL_REG = (1 << WDCE) | (1 << WDE);
     _WD_CONTROL_REG = (1 << WDIE) | (1 << WDP1);
     sei();
+
+    pinMode(LAUGHTER_PIN, OUTPUT);
+    digitalWrite(LAUGHTER_PIN, LOW);
 }
+
+bool winterMode = false;
 
 ISR(WDT_vect)
 {
-    if(showOngoing) {
+    if (showOngoing)
+    {
         return;
     }
 
@@ -101,13 +109,25 @@ ISR(WDT_vect)
 
     if (!thunderstormActive)
     {
-        CRGB noStormColor = CRGB::DarkGreen;
-        noStormColor.fadeToBlackBy(255 - val);
-
-        for (int ix = 0; ix < LEDS_COUNT; ix++)
+        if (winterMode)
         {
-            led[ix] = noStormColor;
+            for (int ix = 0; ix < LEDS_COUNT; ix++)
+            {
+                led[ix] = (ix % 2 == 0) ? CRGB::DarkOrange : CRGB::DarkRed;
+                led[ix].fadeToBlackBy(random(120) + 135);
+            }
         }
+        else
+        {
+            CRGB noStormColor = CRGB::DarkGreen;
+            noStormColor.fadeToBlackBy(255 - val);
+
+            for (int ix = 0; ix < LEDS_COUNT; ix++)
+            {
+                led[ix] = noStormColor;
+            }
+        }
+
         FastLED.show();
 
         return;
@@ -160,7 +180,7 @@ void lightningShow()
         led[ix] = CRGB::Black;
     }
     FastLED.show();
- 
+
     showOngoing = false;
 }
 
@@ -250,61 +270,21 @@ void reportStatus()
     printReport(thunderstormActive, strikes, distance, energy, timeSinceLastStrikeMinutes);
 }
 
-void updateStatusColor()
-{
-    //timeSinceLastStrikeMinutes = floor(((millis() - lastStrikeTime) / 60000));
-
-    // float breathRate = (thunderstormActive && timeSinceLastStrikeMinutes < 5) ? (2000.0 / (float)(min(strikes, 10))) : 2000.0;
-
-    // // Keep breathing! See Sean Voisen great post from which I grabbed the formula.
-    // // https://sean.voisen.org/blog/2011/10/breathing-led-with-arduino/
-    // float val = (exp(sin(millis() / breathRate * PI)) - 0.36787944) * 108.0;
-
-    // if (!thunderstormActive)
-    // {
-    //     CRGB noStormColor = CRGB::DarkGreen;
-    //     noStormColor.fadeToBlackBy(255 - val);
-
-    //     for (int ix = 0; ix < LEDS_COUNT; ix++)
-    //     {
-    //         led[ix] = noStormColor;
-    //     }
-    //     FastLED.show();
-
-    //     return;
-    // }
-
-    // if (timeSinceLastStrikeMinutes > 90)
-    // {
-    //     strikes = 0;
-    //     thunderstormActive = false;
-
-    //     return;
-    // }
-
-    // CRGB color = CHSV(timeSinceLastStrikeMinutes, 255, 255);
-    // color.fadeToBlackBy(255 - val);
-
-    // for (int ix = 0; ix < LEDS_COUNT; ix++)
-    // {
-    //     led[ix] = color;
-    // }
-    // FastLED.show();
-}
-
 void loop()
 {
     reportStatus();
-    updateStatusColor();
+
+    if (millis() > laughUntil)
+    {
+        digitalWrite(LAUGHTER_PIN, LOW);
+    }
 
     byte intVal = lightning.readInterruptReg();
     if (intVal)
     {
         if (intVal == DISTURBER_INT)
         {
-            interferers++;
-            // lightningShow();
-            // lastStrikeTime = millis();
+            interferers++;        
         }
         else if (intVal == LIGHTNING_INT)
         {
@@ -316,6 +296,7 @@ void loop()
             lightningShow();
             thunderstormActive = true;
         }
+
         while (lightning.readInterruptReg())
         {
             delay(1);
@@ -330,13 +311,20 @@ void loop()
         distance = random(1, 20);
 
         lastStrikeTime = millis();
+        digitalWrite(LAUGHTER_PIN, HIGH);
+        laughUntil = millis() + 2000;
         lightningShow();
         thunderstormActive = true;
     }
 
-    if (controlValue == 'e')
+    if (controlValue == 'r')
     {
         strikes = 0;
         thunderstormActive = false;
     }
+
+    if (controlValue == 'w')
+    {
+        winterMode = !winterMode;        
+    }    
 }
